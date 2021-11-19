@@ -15,6 +15,7 @@ int  nodeCounter(hcmCell* cell);
 void getHeirDepth(int depth, int& depthRef, hcmCell* cell);
 void getAndFolded(int& cntRef, hcmCell* cell);
 int  getNandFlat(hcmCell* flatCell); 
+void getDeepestNodes(int depth, int& depthRef, hcmCell* cell);
 
 ///////////////////////////////////////////////////////////////////////////
 
@@ -213,6 +214,33 @@ int getNandFlat(hcmCell* flatCell){
 }
 
 
+void getDeepestNodes(int depth, int& depthRef, hcmCell* cell){
+
+    depth++;
+    std::map< std::string, hcmInstance*>::const_iterator cI;
+    for(cI = cell->getInstances().begin();
+        cI != cell->getInstances().end(); cI++)
+    {
+        cout << "-I- traversing cell: " << (*cI).first <<endl;
+        cout << "-I- Info: " << (*cI).second <<endl;
+        getDeepestNodes(depth, depthRef, (*cI).second->masterCell());
+        }
+    // will be reached once no
+    // other instances are found
+    // after reaching lowest level
+    if(depth==depthRef) {
+	//reached lowest heirarchi. 
+	std::map< std::string, hcmNode*>::const_iterator nI;
+	for(nI = cell->getNodes().begin();
+            nI != cell->getNodes().end(); cI++)
+    	{
+		string nodeName = (*nI).first;
+		if(nodeName != "VDD" && nodeName != "VSS")
+    			cout << "-I- found deepest node: " << nodeName;
+	} 
+    }
+
+}
 
 
 
