@@ -103,6 +103,7 @@ int main(int argc, char **argv) {
         if(port->getDirection()==INPUT){
         	nodeQueue.push(node);
 	}
+	else node->setProp("done", DONE); //output nodes shal not be checked.
   }	
 
   //setting all Instports unvisited;
@@ -134,17 +135,20 @@ int main(int argc, char **argv) {
         	hcmInstPort* instPort = (*ipI).second;
 		instPort->setProp("visited", VISITED);
 		hcmInstance* inst = instPort->getInst();
-		instQueue.push(inst);
-                cout << "found instance : " << inst->getName();
-                cout << " connected to cell : " << inst->masterCell()->getName() <<endl;
-		//cout << " port Set : "<< instPort->getName() <<endl;
+		int idone;
+		inst->getProp("done", idone);
+		if(idone != DONE){
+			instQueue.push(inst);
+                	cout << "found instance : " << inst->getName();
+                	cout << " connected to cell : " << inst->masterCell()->getName() <<endl;
+		}	
   	}
 	
 	while(!instQueue.empty()){
 		hcmInstance* inst = instQueue.front();
         	instQueue.pop();
-		int stat;
-		inst->getProp("done", stat);
+		//int stat;
+		//inst->getProp("done", stat);
 		cout << "handeling instance : " << inst->getName() <<endl;
 		int Done=DONE;
 		/* check all port inputs */
