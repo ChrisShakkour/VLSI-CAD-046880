@@ -5,6 +5,7 @@
 #include "hcm.h"
 #include "flat.h"
 #include <queue>
+#include <bits/stdc++.h>
 
 using namespace std;
 
@@ -83,6 +84,7 @@ int main(int argc, char **argv) {
   hcmCell *flatCell = hcmFlatten(cellName + string("_flat"), topCell, globalNodes);
   cout << "-I- Top cell flattened" << endl;
 
+  std::vector< std::pair<int, std::string> > database;
   std::queue<hcmNode*> nodeQueue;
 
   /* initiating Nodes property */ 
@@ -92,8 +94,16 @@ int main(int argc, char **argv) {
         hcmNode* node = (*pI).second;
         node->setProp("done", UNDONE);
         node->setProp("level", ZERO);
-        }
+	string nNode = node->getName();
+	if(nNode == "VSS" || nNode == "VDD"){
+		nodeQueue.push(node);
+		cout << "#### VSS VDD" <<endl;
+  	}      
+  }
+
  
+ 
+
   // push input nodes of flat cell to queue.
   vector<hcmPort*> ports = flatCell->getPorts();
   vector<hcmPort*>::iterator iP;
@@ -103,8 +113,8 @@ int main(int argc, char **argv) {
         if(port->getDirection()==INPUT){
         	nodeQueue.push(node);
 	}
-	else node->setProp("done", DONE); //output nodes shal not be checked.
   }	
+
 
   //setting all Instports unvisited;
   //setting all instances to level0;
@@ -137,7 +147,7 @@ int main(int argc, char **argv) {
 		hcmInstance* inst = instPort->getInst();
 		int idone;
 		inst->getProp("done", idone);
-		if(idone != DONE){
+		if(idone == UNDONE){
 			instQueue.push(inst);
                 	cout << "found instance : " << inst->getName();
                 	cout << " connected to cell : " << inst->masterCell()->getName() <<endl;
@@ -187,11 +197,22 @@ int main(int argc, char **argv) {
 			}	
 			inst->setProp("level", nodeLevel);
 			inst->setProp("done", DONE);		
-			fv << (nodeLevel);
-			fv << " " <<inst->getName() <<endl;
+			//fv << (nodeLevel);
+			//fv << " " <<inst->getName() <<endl;
+			database.push_back( make_pair(nodeLevel,inst->getName()));
+			//database.insert(std::pair<int, std::string>(nodeLevel, inst->getName()));
 		}				
 	}	
   }
+
+
+ std::vector< std::pair<int, std::string> >::const_iterator iI;
+ sort(database.begin(), database.end());
+ for( iI = database.begin(); iI != database.end(); iI++){
+    //cout << (*iI).first << " " << (*iI).second <<endl;
+    fv << (*iI).first;
+    fv << " " << (*iI).second <<endl;
+ }
 
 
  return(0);
