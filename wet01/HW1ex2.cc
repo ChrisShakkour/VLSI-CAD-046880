@@ -94,11 +94,11 @@ int main(int argc, char **argv) {
         hcmNode* node = (*pI).second;
         node->setProp("done", UNDONE);
         node->setProp("level", ZERO);
-  string nNode = node->getName();
-  if(nNode == "VSS" || nNode == "VDD"){
-    nodeQueue.push(node);
-    cout << "#### VSS VDD" <<endl;
-    }      
+	string nNode = node->getName();
+	if(nNode == "VSS" || nNode == "VDD"){
+		nodeQueue.push(node);
+		cout << "#### VSS VDD" <<endl;
+  	}      
   }
 
  
@@ -108,12 +108,12 @@ int main(int argc, char **argv) {
   vector<hcmPort*> ports = flatCell->getPorts();
   vector<hcmPort*>::iterator iP;
   for(iP = ports.begin(); iP != ports.end(); iP++){
-    hcmPort* port = (*iP);
-  hcmNode* node = port->owner();
+  	hcmPort* port = (*iP);
+	hcmNode* node = port->owner();
         if(port->getDirection()==INPUT){
-          nodeQueue.push(node);
-  }
-  } 
+        	nodeQueue.push(node);
+	}
+  }	
 
 
   //setting all Instports unvisited;
@@ -121,88 +121,88 @@ int main(int argc, char **argv) {
   std::map< std::string, hcmInstance*>::const_iterator jI;
   for(jI = flatCell->getInstances().begin();
       jI != flatCell->getInstances().end(); jI++){
-  hcmInstance* inst = (*jI).second;
-  inst->setProp("level", ZERO);
-  inst->setProp("done", UNDONE);
-  std::map< std::string, hcmInstPort*>::const_iterator ipI;
+	hcmInstance* inst = (*jI).second;
+	inst->setProp("level", ZERO);
+	inst->setProp("done", UNDONE);
+	std::map< std::string, hcmInstPort*>::const_iterator ipI;
         for( ipI = inst->getInstPorts().begin();
              ipI != inst->getInstPorts().end(); ipI++){
                 hcmInstPort* instPort = (*ipI).second;
                 instPort->setProp("visited", UNVISITED);
-  }
+	}
   }
 
 
   while(!nodeQueue.empty()){
-  hcmNode* node = nodeQueue.front();
-  nodeQueue.pop();
-    cout << "-> Handeling Node : " << node->getName() <<endl;
-  node->setProp("done", DONE);
-  std::queue<hcmInstance*> instQueue; 
-  std::map< std::string, hcmInstPort*>::const_iterator ipI;
+	hcmNode* node = nodeQueue.front();
+	nodeQueue.pop();
+  	cout << "-> Handeling Node : " << node->getName() <<endl;
+	node->setProp("done", DONE);
+	std::queue<hcmInstance*> instQueue;	
+	std::map< std::string, hcmInstPort*>::const_iterator ipI;
         for( ipI = node->getInstPorts().begin();
              ipI != node->getInstPorts().end(); ipI++){
-          hcmInstPort* instPort = (*ipI).second;
-    instPort->setProp("visited", VISITED);
-    hcmInstance* inst = instPort->getInst();
-    int idone;
-    inst->getProp("done", idone);
-    if(idone == UNDONE){
-      instQueue.push(inst);
-                  cout << "found instance : " << inst->getName();
-                  cout << " connected to cell : " << inst->masterCell()->getName() <<endl;
-    } 
-    }
-  
-  while(!instQueue.empty()){
-    hcmInstance* inst = instQueue.front();
-          instQueue.pop();
-    //int stat;
-    //inst->getProp("done", stat);
-    cout << "handeling instance : " << inst->getName() <<endl;
-    int Done=DONE;
-    /* check all port inputs */
-    std::queue<hcmInstPort*> oQueue;
-    std::map< std::string, hcmInstPort*>::const_iterator ipI;
-          for( ipI = inst->getInstPorts().begin();
-                   ipI != inst->getInstPorts().end(); ipI++){
-      hcmInstPort* instPort = (*ipI).second;
-      hcmPort* port = instPort->getPort();
-      cout << "found instPort : " << instPort->getName()  <<endl;
-      int stat;
+        	hcmInstPort* instPort = (*ipI).second;
+		instPort->setProp("visited", VISITED);
+		hcmInstance* inst = instPort->getInst();
+		int idone;
+		inst->getProp("done", idone);
+		if(idone == UNDONE){
+			instQueue.push(inst);
+                	cout << "found instance : " << inst->getName();
+                	cout << " connected to cell : " << inst->masterCell()->getName() <<endl;
+		}	
+  	}
+	
+	while(!instQueue.empty()){
+		hcmInstance* inst = instQueue.front();
+        	instQueue.pop();
+		//int stat;
+		//inst->getProp("done", stat);
+		cout << "handeling instance : " << inst->getName() <<endl;
+		int Done=DONE;
+		/* check all port inputs */
+		std::queue<hcmInstPort*> oQueue;
+		std::map< std::string, hcmInstPort*>::const_iterator ipI;
+        	for( ipI = inst->getInstPorts().begin();
+             	     ipI != inst->getInstPorts().end(); ipI++){
+			hcmInstPort* instPort = (*ipI).second;
+			hcmPort* port = instPort->getPort();
+			cout << "found instPort : " << instPort->getName()  <<endl;
+			int stat;
                         instPort->getProp("visited", stat);
                         cout << "Visisted : " << stat <<endl;
-      if(port->getDirection()==INPUT){
-        if(stat != VISITED) Done = UNDONE;
-      }
-      else oQueue.push(instPort);
-    }
-    
-    int nodeLevel;
-    node->getProp("level", nodeLevel);
-    
-    if(Done==DONE){ 
-      cout << "----------DONE----------" <<endl;  
-      while(!oQueue.empty()){
-        hcmInstPort* instPort = oQueue.front();
-        oQueue.pop();
-        hcmNode* newNode = instPort->getNode();
-        int x;
-        newNode->getProp("done", x);
-        if(x==UNDONE) {
-          nodeQueue.push(newNode);
-          newNode->setProp("level", nodeLevel + 1);
-          cout << "Node Level : " << nodeLevel<<endl;
-        }
-      } 
-      inst->setProp("level", nodeLevel);
-      inst->setProp("done", DONE);    
-      //fv << (nodeLevel);
-      //fv << " " <<inst->getName() <<endl;
-      database.push_back( make_pair(nodeLevel,inst->getName()));
-      //database.insert(std::pair<int, std::string>(nodeLevel, inst->getName()));
-    }       
-  } 
+			if(port->getDirection()==INPUT){
+				if(stat != VISITED) Done = UNDONE;
+			}
+			else oQueue.push(instPort);
+		}
+		
+		int nodeLevel;
+		node->getProp("level", nodeLevel);
+		
+		if(Done==DONE){	
+			cout << "----------DONE----------" <<endl;	
+			while(!oQueue.empty()){
+				hcmInstPort* instPort = oQueue.front();
+				oQueue.pop();
+				hcmNode* newNode = instPort->getNode();
+				int x;
+				newNode->getProp("done", x);
+				if(x==UNDONE) {
+					nodeQueue.push(newNode);
+					newNode->setProp("level", nodeLevel + 1);
+					cout << "Node Level : " << nodeLevel<<endl;
+				}
+			}	
+			inst->setProp("level", nodeLevel);
+			inst->setProp("done", DONE);		
+			//fv << (nodeLevel);
+			//fv << " " <<inst->getName() <<endl;
+			database.push_back( make_pair(nodeLevel,inst->getName()));
+			//database.insert(std::pair<int, std::string>(nodeLevel, inst->getName()));
+		}				
+	}	
   }
 
 
