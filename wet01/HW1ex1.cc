@@ -90,18 +90,14 @@ int main(int argc, char **argv) {
   fv << "a. Number of instances in the top-level cell: "<< num_instances << endl;
 
   /* section b */
-  //int num_nodes = topCell->getNodes().size(); // number of nodes in the map of topCell.Nodes
-  //num_nodes-=globalNodes.size(); //reducing the global nodes from the calculation 
-  /* counting nodes that are not VSS nor VDD */
-  int num_nodes=0;
-  string nodeName;
-  std::map< std::string, hcmNode*>::const_iterator pI;
-  for(pI = topCell->getNodes().begin();
-      pI != topCell->getNodes().end(); pI++)
-  {
-    nodeName = (*pI).first;
-    if(nodeName != "VDD" && nodeName != "VSS") num_nodes++;
+  int num_nodes = 0;
+  std::map< std::string, hcmNode*>::const_iterator hnI;
+  for(hnI = topCell->getNodes().begin();
+      hnI != topCell->getNodes().end(); hnI++){
+    if(!IsGlobalNode(hnI->second,globalNodes)){
+      num_nodes++;
     }
+  }
   fv << "b. Number of nodes in the top-level cell: "<< num_nodes << endl;
 
   /* section c */
