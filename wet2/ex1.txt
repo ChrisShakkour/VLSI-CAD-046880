@@ -1,0 +1,3 @@
+Simulation results in VCD file is missing.
+Taking care of the other DFF implementaion will be take care of soon.
+Of course, the questions in part 1 and 2 are missing as well. 
