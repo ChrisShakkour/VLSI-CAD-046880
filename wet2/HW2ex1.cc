@@ -7,7 +7,7 @@
 #include "hcmvcd.h"
 #include <iostream>
 #include <set>
-#include <string.h>
+#include <string>
 #include <stdlib.h>
 #include "hcmsigvec.h"
 #include <queue>
@@ -39,6 +39,8 @@ void Event_Processor(std::queue< Event > &EventQueue,std::queue<hcmInstance *> &
 // implementation in the end 
 
 int main(int argc, char **argv) {
+  string  cl = "CLK";
+  cout << "test: " << cl << "00"<< endl;
   int argIdx = 1;
   int anyErr = 0;
   unsigned int i;
@@ -118,19 +120,19 @@ int main(int argc, char **argv) {
     }
   }
 
-  // set propety for Nodes : cur_val Initalized with false.
+  // set propety for Nodes : cur_val,prev_val Initalized with false.
   // if it is a Global Node of type VDD cur_val=true.
-  // if it is a CLK node, we add a property of prev_val Initalized with false.
   std::map< std::string, hcmNode* >::const_iterator nI;
   for (nI =flatCell->getNodes().begin(); nI != flatCell->getNodes().end(); nI++){
     hcmNode *node= nI->second;
-    node->setProp("cur_val",false);  
+    node->setProp("cur_val",false);
+    node->setProp("prev_val",false);   
     if(node->getName()=="VDD"){
       node->setProp("cur_val",true);  
     }
-    if(node->getName()=="CLK"){
-      node->setProp("prev_val",false);  
-    }
+    // if(node->getName()=="CLK"){
+    //   node->setProp("prev_val",false);  
+    // }
   } 
 
   // Event queue containing Events Class (hcmNode *Node,bool new_value)
@@ -147,16 +149,20 @@ int main(int argc, char **argv) {
     hcmNode *node=flatCell->getNode(name);
     Event new_event(node,val);
     EventQueue.push(new_event);
+    // cout << "test: " << name << "00"<< endl;
+    // cout <<"test "<<name << " here" <<endl;
     cout << "  " << name << " = " << (val? "1" : "0")  << endl;
+    // cout << "  " << name << " = " << endl;
    }
-
+    cout <<"test " <<endl;
    while(!EventQueue.empty()){
     Event_Processor(EventQueue,GateQueue);
     if(!GateQueue.empty()){
       Gate_Processor(EventQueue,GateQueue);
     }
    }
-   // printing final values
+   // printing Intermediate values
+   cout <<"## Intermediate Values " <<endl;
    for (nI =flatCell->getNodes().begin(); nI != flatCell->getNodes().end(); nI++){
     hcmNode *node= nI->second;
     string node_name=node->getName();
@@ -301,14 +307,16 @@ bool DFF(hcmInstance *inst,hcmNode **output_node){
         node->getProp("prev_val",prev_clk);
         cout<< "node "<<node->getName()<<" = "<< cur_clk  <<endl;
       } else{
-        node->getProp("cur_val",data);
-        cout<< "node "<<node->getName()<<" = "<< data  <<endl;
+        //node->getProp("cur_val",data);
+        node->getProp("prev_val",data);
+        cout<< "(prev result) node "<<node->getName()<<" = "<< data  <<endl;
       }
     }
   }
 
   if(cur_clk==true && prev_clk==false){
-   return data; 
+    cout<< "rising clock" <<endl;
+    return data; 
   }
   return cur_result;
 }
@@ -353,7 +361,7 @@ void Simulate_Gate(hcmInstance * inst,std::queue< Event > &EventQueue){
     }
     Event new_event(output_node,result);
     EventQueue.push(new_event);
-    output_node->getProp("cur_val",result);
+    // output_node->getProp("cur_val",result);
   }
 }
 
@@ -363,13 +371,10 @@ void Event_Processor(std::queue< Event > &EventQueue,std::queue<hcmInstance *> &
     hcmNode *node=E.Node;
     bool new_val = E.val;
 
-    // copying new value to the Event's node.
-    // If is a clk node, need to update previous clk
-    if(node->getName()=="CLK"){
-      bool temp=false;
-      if(node->getProp("cur_val",temp)==OK){
-        node->setProp("prev_val",temp);
-      }
+    // copying new value to the Event's node and update previous value
+    bool temp=false;
+    if(node->getProp("cur_val",temp)==OK){
+      node->setProp("prev_val",temp);
     }
     node->setProp("cur_val",new_val);
 
