@@ -12,6 +12,7 @@
 #include "hcmsigvec.h"
 #include <queue>
 
+
 using namespace std;
 
 bool verbose = false;
@@ -130,60 +131,64 @@ int main(int argc, char **argv) {
     if(node->getName()=="VDD"){
       node->setProp("cur_val",true);  
     }
-    // if(node->getName()=="CLK"){
-    //   node->setProp("prev_val",false);  
-    // }
   } 
 
   // Event queue containing Events Class (hcmNode *Node,bool new_value)
   std::queue< Event > EventQueue;
   std::queue< hcmInstance * > GateQueue;
 
+
+  // vcd file initalization
+  vcdFormatter vcd(cellName + ".vcd", flatCell, globalNodes);
+  if (!vcd.good()) {
+    printf("-E- Could not create vcdFormatter for cell: %s\n", cellName.c_str());
+    exit(1);
+  }
+  //controlling simulation time
+  unsigned int time = 0;
+  //no instance parents of in the flat model.
+  list<const hcmInstance*> noInsts;
+
   // read the vectors file one line at a time until the eof
   cout << "-I- Reading vectors ... " << endl;
   while (parser.readVector() == 0) {
-   for (set<string>::iterator I= sigs.begin(); I != sigs.end(); I++) {
-    string name = (*I);
-    bool val;
-    parser.getSigValue(name, val);
-    hcmNode *node=flatCell->getNode(name);
-    Event new_event(node,val);
-    EventQueue.push(new_event);
-    // cout << "test: " << name << "00"<< endl;
-    // cout <<"test "<<name << " here" <<endl;
-    cout << "  " << name << " = " << (val? "1" : "0")  << endl;
-    // cout << "  " << name << " = " << endl;
-   }
-    cout <<"test " <<endl;
-   while(!EventQueue.empty()){
-    Event_Processor(EventQueue,GateQueue);
-    if(!GateQueue.empty()){
-      Gate_Processor(EventQueue,GateQueue);
+    vcd.changeTime(time);
+    for (set<string>::iterator I= sigs.begin(); I != sigs.end(); I++) {
+      string name = (*I);
+      bool val;
+      parser.getSigValue(name, val);
+      hcmNode *node=flatCell->getNode(name);
+      Event new_event(node,val);
+      EventQueue.push(new_event);
+      cout << "  " << name << " = " << (val? "1" : "0")  << endl;
     }
-   }
-   // printing Intermediate values
-   cout <<"## Intermediate Values " <<endl;
-   for (nI =flatCell->getNodes().begin(); nI != flatCell->getNodes().end(); nI++){
-    hcmNode *node= nI->second;
-    string node_name=node->getName();
-    bool val;
-    node->getProp("cur_val",val);
-    cout << node_name<<" = "<<val <<endl;
-  } 
-   cout << "-I- Reading next vectors ... " << endl;
+    cout <<"test " <<endl;
+    while(!EventQueue.empty()){
+      Event_Processor(EventQueue,GateQueue);
+      if(!GateQueue.empty()){
+        Gate_Processor(EventQueue,GateQueue);
+      }
+    }
+    // printing Intermediate values
+    cout <<"## Intermediate Values " <<endl;
+    for (nI =flatCell->getNodes().begin(); nI != flatCell->getNodes().end(); nI++){
+      hcmNode *node= nI->second;
+      if(IsGlobalNode(node,globalNodes)){
+        continue;
+      }
+      string node_name=node->getName();
+      bool newVal;
+      node->getProp("cur_val",newVal);
+      cout << node_name<<" = "<<newVal <<endl;
+      hcmNodeCtx *nodeCtx = new hcmNodeCtx(noInsts,node);
+      if (nodeCtx) {
+        vcd.changeValue(nodeCtx, newVal);
+        delete nodeCtx;
+      }
+    }
+    time++; 
+    cout << "-I- Reading next vectors ... " << endl;
   }
-
-  // vcdFormatter vcd(cellName + ".vcd", flatCell, globalNodes);
-  // if (!vcd.good()) {
-  //   printf("-E- Could not create vcdFormatter for cell: %s\n", cellName.c_str());
-  //   exit(1);
-  // }
-
-  // // map< const hcmNodeCtx, bool, cmpNodeCtx > valByNodeCtx;
-
-  // for (unsigned int t = 1; t < 25; t++) {
-  //  vcd.changeTime(t);
-  // }
 
   return(0);
 }
@@ -351,17 +356,21 @@ void Simulate_Gate(hcmInstance * inst,std::queue< Event > &EventQueue){
   cout<< result <<endl;
   cout<< "######" <<endl;
   //Applying the result to the output node
-  bool prev_val ,first_run;
+  bool prev_val ;
+  // bool first_run;
   output_node->getProp("cur_val",prev_val);
-  output_node->getProp("first_run",first_run);
+  // output_node->getProp("first_run",first_run);
   // if output changes we push new event to EventQueue (Event-Driven approach)
-  if(first_run || prev_val!=result){
-    if(first_run){
-      output_node->setProp("first_run",false);
-    }
+  if( prev_val!=result){
+    // if(first_run){
+    //   output_node->setProp("first_run",false);
+    // }
     Event new_event(output_node,result);
     EventQueue.push(new_event);
     // output_node->getProp("cur_val",result);
+  }else{
+    // cur val doesn't change
+    output_node->setProp("prev_val",prev_val);
   }
 }
 
