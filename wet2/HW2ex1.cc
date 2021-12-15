@@ -40,8 +40,6 @@ void Event_Processor(std::queue< Event > &EventQueue,std::queue<hcmInstance *> &
 // implementation in the end 
 
 int main(int argc, char **argv) {
-  string  cl = "CLK";
-  cout << "test: " << cl << "00"<< endl;
   int argIdx = 1;
   int anyErr = 0;
   unsigned int i;
@@ -106,35 +104,37 @@ int main(int argc, char **argv) {
     cout << "SIG: " << (*I) << endl;
   }
 
-  // For any output nodes set property: first_run initialized as true. so that even if output 
+  // For any nodes set property: first_run initialized as true. so that even if output 
   // doesn't change in the first run, we add it to the EventQueue anyway.
-  std::map< std::string, hcmInstance* >::const_iterator iI;
-  std::map<std::string, hcmInstPort* >::const_iterator ipI;
-  for (iI =flatCell->getInstances().begin(); iI != flatCell->getInstances().end(); iI++){
-    hcmInstance* inst= iI->second;
-    for (ipI =inst->getInstPorts().begin(); ipI != inst->getInstPorts().end(); ipI++){
-      hcmInstPort* inst_port = ipI->second;
-      if(inst_port->getPort()->getDirection()==OUT){
-        hcmNode *node= inst_port->getNode();
-        node->setProp("first_run",true);
-      }
-    }
-  }
-
   // set propety for Nodes : cur_val,prev_val Initalized with false.
   // if it is a Global Node of type VDD cur_val=true.
   std::map< std::string, hcmNode* >::const_iterator nI;
   for (nI =flatCell->getNodes().begin(); nI != flatCell->getNodes().end(); nI++){
     hcmNode *node= nI->second;
     node->setProp("cur_val",false);
-    node->setProp("prev_val",false);   
+    // node->setProp("prev_val",false);  
+    node->setProp("first_run",true);    
     if(node->getName()=="VDD"){
-      node->setProp("cur_val",true);  
+      node->setProp("cur_val",true); 
+      // node->setProp("prev_val",true); 
+    }
+    if(node->getName()=="CLK"){ 
+      node->setProp("prev_CLK",false); 
     }
   } 
 
+  // set property for dff instance: prev_val = false. it stores the data from the previous cycle.
+  map<string,hcmInstance*>::const_iterator iI;
+  for (iI=flatCell->getInstances().begin(); iI!=flatCell->getInstances().end();iI++) {
+      string instname = iI->first; 
+      hcmInstance* inst = iI->second;   
+      if (string::npos != instname.find("dff")) {
+        inst->setProp("prev_val", false);   
+      }
+  }
   // Event queue containing Events Class (hcmNode *Node,bool new_value)
   std::queue< Event > EventQueue;
+  // Gate queue containing instances (hcmInstance *)
   std::queue< hcmInstance * > GateQueue;
 
 
@@ -150,9 +150,10 @@ int main(int argc, char **argv) {
   list<const hcmInstance*> noInsts;
 
   // read the vectors file one line at a time until the eof
-  cout << "-I- Reading vectors ... " << endl;
+  // cout << "-I- Reading vectors ... " << endl;
   while (parser.readVector() == 0) {
     vcd.changeTime(time);
+    // cout << "$Time = " << time <<endl;
     for (set<string>::iterator I= sigs.begin(); I != sigs.end(); I++) {
       string name = (*I);
       bool val;
@@ -160,9 +161,13 @@ int main(int argc, char **argv) {
       hcmNode *node=flatCell->getNode(name);
       Event new_event(node,val);
       EventQueue.push(new_event);
-      cout << "  " << name << " = " << (val? "1" : "0")  << endl;
+      if(node->getName()=="CLK"){
+        bool prev_clk;
+        node->getProp("cur_val",prev_clk); 
+        node->setProp("prev_CLK",prev_clk); 
+      }
+      // cout << "  " << name << " = " << (val? "1" : "0")  << endl;
     }
-    cout <<"test " <<endl;
     while(!EventQueue.empty()){
       Event_Processor(EventQueue,GateQueue);
       if(!GateQueue.empty()){
@@ -170,7 +175,6 @@ int main(int argc, char **argv) {
       }
     }
     // printing Intermediate values
-    cout <<"## Intermediate Values " <<endl;
     for (nI =flatCell->getNodes().begin(); nI != flatCell->getNodes().end(); nI++){
       hcmNode *node= nI->second;
       if(IsGlobalNode(node,globalNodes)){
@@ -179,7 +183,7 @@ int main(int argc, char **argv) {
       string node_name=node->getName();
       bool newVal;
       node->getProp("cur_val",newVal);
-      cout << node_name<<" = "<<newVal <<endl;
+      // cout << node_name<<" = "<<newVal <<endl;
       hcmNodeCtx *nodeCtx = new hcmNodeCtx(noInsts,node);
       if (nodeCtx) {
         vcd.changeValue(nodeCtx, newVal);
@@ -187,7 +191,7 @@ int main(int argc, char **argv) {
       }
     }
     time++; 
-    cout << "-I- Reading next vectors ... " << endl;
+    // cout << "-I- Reading next vectors ... " << endl;
   }
 
   return(0);
@@ -196,6 +200,8 @@ int main(int argc, char **argv) {
 
 /* functions implementation*/
 
+// Gate processor function, reponsible of simulation of instances from GateQueue 
+// and follow that, adding new events to EventQueue
 void Gate_Processor(std::queue< Event > &EventQueue,std::queue<hcmInstance *> &GateQueue){
   while(!GateQueue.empty()){
     hcmInstance *inst=GateQueue.front();
@@ -207,10 +213,9 @@ void Gate_Processor(std::queue< Event > &EventQueue,std::queue<hcmInstance *> &G
 }
 
 
-
+// simulate OR gate ,return the result , and changes output_node accordingly
 bool logic_OR(hcmInstance *inst,hcmNode **output_node){
   bool result=false;
-  cout<< "######" << inst->getName() <<endl;
   std::map<std::string, hcmInstPort* >::const_iterator ipI;
   for (ipI =inst->getInstPorts().begin(); ipI != inst->getInstPorts().end(); ipI++){
     hcmInstPort* ip= ipI->second;
@@ -223,15 +228,14 @@ bool logic_OR(hcmInstance *inst,hcmNode **output_node){
       if(node->getProp("cur_val",temp_res)==OK){
         result=result || temp_res;
       }
-      cout<< "node "<<node->getName()<<" = "<< temp_res  <<endl;
     }
   }
   return result;
 }
 
+// simulate XOR gate ,return the result , and changes output_node accordingly
 bool logic_XOR(hcmInstance *inst,hcmNode **output_node){
   bool result=false;
-  cout<< "######" << inst->getName() <<endl;
   std::map<std::string, hcmInstPort* >::const_iterator ipI;
   for (ipI =inst->getInstPorts().begin(); ipI != inst->getInstPorts().end(); ipI++){
     hcmInstPort* ip= ipI->second;
@@ -244,15 +248,14 @@ bool logic_XOR(hcmInstance *inst,hcmNode **output_node){
       if(node->getProp("cur_val",temp_res)==OK){
         result=result ^ temp_res;
       }
-      cout<< "node "<<node->getName()<<" = "<< temp_res  <<endl;
     }
   }
   return result;
 }
 
+// simulate AND gate ,return the result , and changes output_node accordingly
 bool logic_AND(hcmInstance *inst,hcmNode **output_node){
   bool result=true;
-  cout<< "######" << inst->getName() <<endl;
   std::map<std::string, hcmInstPort* >::const_iterator ipI;
   for (ipI =inst->getInstPorts().begin(); ipI != inst->getInstPorts().end(); ipI++){
     hcmInstPort* ip= ipI->second;
@@ -265,15 +268,14 @@ bool logic_AND(hcmInstance *inst,hcmNode **output_node){
       if(node->getProp("cur_val",temp_res)==OK){
         result=result && temp_res;
       }
-      cout<< "node "<<node->getName()<<" = "<< temp_res  <<endl;
     }
   }
-  cout<< result <<endl;
   return result;
 }
+
+// simulate BUFFER gate , return the result , and changes output_node accordingly
 bool logic_BUFFER(hcmInstance *inst,hcmNode **output_node){
   bool result=false;
-  cout<< "######" << inst->getName() <<endl;
   std::map<std::string, hcmInstPort* >::const_iterator ipI;
   for (ipI =inst->getInstPorts().begin(); ipI != inst->getInstPorts().end(); ipI++){
     hcmInstPort* ip= ipI->second;
@@ -286,17 +288,17 @@ bool logic_BUFFER(hcmInstance *inst,hcmNode **output_node){
       if(node->getProp("cur_val",temp_res)==OK){
         result=temp_res;
       }
-      cout<< "node "<<node->getName()<<" = "<< temp_res  <<endl;
     }
   }
   return result;
 }
 
-
-bool DFF(hcmInstance *inst,hcmNode **output_node){
+// simulate DFF gate , return the result of output , and changes output_node accordingly
+// in addition it return CLK=true as an argument iff on rising edge.
+bool DFF(hcmInstance *inst,hcmNode **output_node,bool &CLK){
   bool cur_clk=false,prev_clk=false;
   bool data=false,cur_result=false;
-  cout<< "######" << inst->getName() <<endl;
+  // cout<< "######" << inst->getName() <<endl;
   std::map<std::string, hcmInstPort* >::const_iterator ipI;
   for (ipI =inst->getInstPorts().begin(); ipI != inst->getInstPorts().end(); ipI++){
     hcmInstPort* ip= ipI->second;
@@ -309,82 +311,93 @@ bool DFF(hcmInstance *inst,hcmNode **output_node){
       bool temp_res;
       if(ip->getPort()->getName()=="CLK"){
         node->getProp("cur_val",cur_clk);
-        node->getProp("prev_val",prev_clk);
-        cout<< "node "<<node->getName()<<" = "<< cur_clk  <<endl;
+        node->getProp("prev_CLK",prev_clk);
+        // cout<< "node "<<node->getName()<<" = "<< cur_clk  <<endl;
       } else{
-        //node->getProp("cur_val",data);
-        node->getProp("prev_val",data);
-        cout<< "(prev result) node "<<node->getName()<<" = "<< data  <<endl;
+        node->getProp("cur_val",data);
+        // node->getProp("prev_val",data);
+        // cout<< "(prev result) node "<<node->getName()<<" = "<< data  <<endl;
       }
     }
   }
-
+  CLK=false;
   if(cur_clk==true && prev_clk==false){
-    cout<< "rising clock" <<endl;
-    return data; 
+    bool prev_data;
+    inst->getProp("prev_val", prev_data);
+    CLK=true;
+    return prev_data; 
   }
+  inst->setProp("prev_val", data);
   return cur_result;
 }
 
+// function responsible of simulating instance and incrementing EventQueue accordingly
 void Simulate_Gate(hcmInstance * inst,std::queue< Event > &EventQueue){
   string logic_name= inst->masterCell()->getName();
-  cout << "-----" << inst->getName() <<endl;
   hcmNode* output_node;
-  bool result;
+  bool result, inverted=false,IsDFF=false,CLK=false;
   if(logic_name.find("nor")!=std::string::npos){
     result=!(logic_OR(inst,&output_node));
+    inverted=true;
   } else if(logic_name.find("xor")!=std::string::npos){
     result=logic_XOR(inst,&output_node);
   } else if(logic_name.find("or")!=std::string::npos){
     result=logic_OR(inst,&output_node);
   } else if(logic_name.find("nand")!=std::string::npos){
     result=!(logic_AND(inst,&output_node));
+    inverted=true;
   } else if(logic_name.find("and")!=std::string::npos){
     result=logic_AND(inst,&output_node);
   } else if(logic_name.find("buffer")!=std::string::npos){
     result=logic_BUFFER(inst,&output_node);
   } else if(logic_name.find("inv")!=std::string::npos){
     result=!(logic_BUFFER(inst,&output_node));
+    inverted=true;
   } else if(logic_name.find("not")!=std::string::npos){
     result=!(logic_BUFFER(inst,&output_node));
+    inverted=true;
   } else if(logic_name.find("dff")!=std::string::npos){
-    result=DFF(inst,&output_node);
+    result=DFF(inst,&output_node,CLK);
+    IsDFF=true;
   } else{
     cerr << "-E- does not support gate type: " << logic_name << " aborting." << endl;
     exit(1);
   }
-  cout<< result <<endl;
-  cout<< "######" <<endl;
   //Applying the result to the output node
   bool prev_val ;
-  // bool first_run;
+  bool first_run=false;
   output_node->getProp("cur_val",prev_val);
-  // output_node->getProp("first_run",first_run);
+  output_node->getProp("first_run",first_run);
+  if(first_run){
+    if(IsDFF&&CLK){
+      output_node->setProp("first_run",false);
+      first_run=true;
+    }
+    else{
+      first_run=false;
+      if((result==0)&&inverted){
+        first_run=true;
+      }
+    }
+  }
+
   // if output changes we push new event to EventQueue (Event-Driven approach)
-  if( prev_val!=result){
-    // if(first_run){
-    //   output_node->setProp("first_run",false);
-    // }
+  if( prev_val!=result || first_run){
     Event new_event(output_node,result);
     EventQueue.push(new_event);
-    // output_node->getProp("cur_val",result);
-  }else{
-    // cur val doesn't change
-    output_node->setProp("prev_val",prev_val);
   }
 }
 
+// Event processor function, reponsible of events from EventQueue 
+// and follow that, adding new gates to GateQueue
 void Event_Processor(std::queue< Event > &EventQueue,std::queue<hcmInstance *> &GateQueue){
   while(!EventQueue.empty()){
     Event E=EventQueue.front();
     hcmNode *node=E.Node;
     bool new_val = E.val;
 
-    // copying new value to the Event's node and update previous value
+    // copying new value to the Event's node 
     bool temp=false;
-    if(node->getProp("cur_val",temp)==OK){
-      node->setProp("prev_val",temp);
-    }
     node->setProp("cur_val",new_val);
 
     // Iterating on Instances in the fanout of the node and pushing them to GateQueue
@@ -392,8 +405,10 @@ void Event_Processor(std::queue< Event > &EventQueue,std::queue<hcmInstance *> &
     for (ipI =node->getInstPorts().begin(); ipI != node->getInstPorts().end(); ipI++){
       hcmInstPort *ip= ipI->second;
       hcmInstance *inst=ip->getInst();
-      if(!Gate_Exist(GateQueue,inst->getName())){
-        GateQueue.push(inst);
+      if(ip->getPort()->getDirection()==IN){
+        if(!Gate_Exist(GateQueue,inst->getName())){
+          GateQueue.push(inst);
+        }
       }
     }
     //removing E from EventQueue
