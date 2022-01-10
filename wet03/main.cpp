@@ -131,18 +131,25 @@ int main(int argc, char **argv) {
     cerr << "-E- Could not open file:" << fileName << endl;
     exit(1);
   }
-  string tempFilename = string("temp_file.txt"); //temporary axuiliary file, later it will be deleted
-  ofstream temp_file(tempFilename.c_str());
-  if (!temp_file.good()) {
-    cerr << "-E- Could not open file:" << tempFilename << endl;
-    exit(1);
-  }
 
   // Flattening the topcells
   hcmCell *flatCell_spec = hcmFlatten(cellName_spec + string("_flat"), topCell_spec, globalNodes);
   cout << "-I- Spec-Cell flattened" << endl;
   hcmCell *flatCell_imp = hcmFlatten(cellName_imp + string("_flat"), topCell_imp, globalNodes);
-  cout << "-I- implementaion-Cell flattened" << endl;
+  cout << "-I- implementaion-Cell flattened\n" << endl;
+
+  vector<hcmPort*> imp_ports = flatCell_imp->getPorts();
+  std::vector<hcmPort*>::const_iterator pI;
+  for(pI=imp_ports.begin(); pI!=imp_ports.end(); pI++){
+    hcmPort* port = *pI;
+    // if(port->getDirection() == IN){
+      string port_name =port->getName();
+      cout << port_name<<endl;
+    // }
+  }
+  cout << " --- " <<endl;
+
+
 
   // map to save pairs of outputs nodes of each cell (those which are needed to be compared)
   std::map< hcmNode*, hcmNode* > outputs_cells; // first - spec node , second - implementation node.
@@ -152,11 +159,19 @@ int main(int argc, char **argv) {
   // check if cells are compatible for FEV, and if so push all output ports to the above map
   bool compatible = compatible_cells(flatCell_spec,flatCell_imp,outputs_cells,dff_cells);
   if(!compatible){
-    cerr<<"-E Cells aren't compatible for FEV , aborting" <<endl;
+    cnf_file <<"p cnf 1 1"<<endl;
+    cnf_file <<"1 0"<<endl; //will return sat
+    cnf_file.close();
+    cerr<<"-E Cells aren't compatible for FEV (different cells)" <<endl;
     exit(1);
   }
 
- 
+  string tempFilename = string("temp_file.txt"); //temporary axuiliary file, later it will be deleted
+  ofstream temp_file(tempFilename.c_str());
+  if (!temp_file.good()) {
+    cerr << "-E- Could not open file:" << tempFilename << endl;
+    exit(1);
+  }
   // introduce a number for each node (0,1,2,3...) for the SPEC cell
   std::map< std::string, hcmNode* >::const_iterator nI;
   std::map< std::string, hcmNode* > spec_nodes = flatCell_spec->getNodes();
@@ -656,24 +671,6 @@ void Instance_Add_Clauses(hcmInstance* inst,Solver &S,ofstream& file,int &num_cl
 }
 
 
-
-//return the hcminstance* of the dff from the imp_cell
-//if it has an absoluto name "inst_name", if not found return NULL;
-hcmInstance* DFF_exist_in_implementation(string inst_name,std::map< std::string, hcmInstance* > &instances_imp){
-  std::map< std::string, hcmInstance* >::const_iterator iI;
-  for(iI =instances_imp.begin(); iI != instances_imp.end(); iI++){
-    hcmInstance* inst_imp= iI->second;
-    string imp_name= inst_imp->getName();
-    std::size_t absolute_inst_name_idx= imp_name.find_last_of("/");
-    string absolute_name = imp_name.substr(absolute_inst_name_idx+1); //get absolute instance name withouth complete path at flatten_Cell
-    if(absolute_name==inst_name){
-      return inst_imp;
-    }
-  }
-  return NULL;
-}
-
-
 /*
   This function return true iff the spec cell and implementation cell
   have the exact amount of output ports, and each have same output names,
@@ -695,6 +692,7 @@ bool compatible_cells(hcmCell *flatCell_spec,hcmCell *flatCell_imp,
       string port_name =port_sp->getName();
       hcmPort * port_imp = flatCell_imp->getPort(port_name);
       if(!port_imp){
+        cout << port_name <<endl;
         cerr<<"-E Different names of output ports between the cells" <<endl;
         return false;
       }
@@ -725,15 +723,12 @@ bool compatible_cells(hcmCell *flatCell_spec,hcmCell *flatCell_imp,
     if(logic_name.find("dff")!=std::string::npos){
       DFF_spec++;
       string inst_name= inst_spec->getName();
-      std::size_t absolute_inst_name_idx= inst_name.find_last_of("/");
-      string absolute_name = inst_name.substr(absolute_inst_name_idx+1); //get absolute instance name withouth complete path at flatten_Cell
-
-      hcmInstance *inst_imp = DFF_exist_in_implementation(absolute_name,instances_imp);
+      hcmInstance *inst_imp = flatCell_imp->getInst(inst_name);
       if(!inst_imp){
-        cout << absolute_name << endl;
         cerr<<"-E Different names of DFF between the cells" <<endl;
         return false;
       }
+      // cout << inst_name << " " << inst_imp->getName() << endl;
       dff_cells.insert(std::pair<hcmInstance*, hcmInstance*>(inst_spec,inst_imp));
     }
   }
