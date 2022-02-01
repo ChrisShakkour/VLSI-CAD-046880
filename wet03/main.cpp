@@ -85,7 +85,8 @@ int main(int argc, char **argv) {
     exit(1);
   }
   
-
+  cout << specFiles[0] <<endl;
+  cout << specFiles[1] <<endl;
   set< string> globalNodes;
   globalNodes.insert("VDD");
   globalNodes.insert("VSS");
@@ -96,7 +97,6 @@ int main(int argc, char **argv) {
   string cellName_spec = specFiles[0];
   for (unsigned int i = 1; i < specFiles.size(); i++) {
     printf("-I- (SPEC) Parsing verilog %s ...\n", specFiles[i].c_str());
-    // cout<<  <<endl;
     if (!design_spec->parseStructuralVerilog(specFiles[i].c_str())) {
       cerr << "-E- Could not parse: " << specFiles[i] << " aborting." << endl;
       exit(1);
@@ -137,18 +137,6 @@ int main(int argc, char **argv) {
   cout << "-I- Spec-Cell flattened" << endl;
   hcmCell *flatCell_imp = hcmFlatten(cellName_imp + string("_flat"), topCell_imp, globalNodes);
   cout << "-I- implementaion-Cell flattened\n" << endl;
-
-  vector<hcmPort*> imp_ports = flatCell_imp->getPorts();
-  std::vector<hcmPort*>::const_iterator pI;
-  for(pI=imp_ports.begin(); pI!=imp_ports.end(); pI++){
-    hcmPort* port = *pI;
-    // if(port->getDirection() == IN){
-      string port_name =port->getName();
-      cout << port_name<<endl;
-    // }
-  }
-  cout << " --- " <<endl;
-
 
 
   // map to save pairs of outputs nodes of each cell (those which are needed to be compared)
@@ -193,8 +181,6 @@ int main(int argc, char **argv) {
     }
   }
   
-
-
   //Adding inputs nodes of the same DFF to the outputs map,
   //and update implementation variable number of dff outputs
   //(we want dff outputs of both cells to have the same variable numbering).
@@ -209,6 +195,8 @@ int main(int argc, char **argv) {
   // and introduce new numbers for non-input nodes (and non-DFF output).
   // note that for input node (or output of DFF) which we've already created a variable
   // in the SPEC cell ,we gave the same variable numeber.
+  // Note, if DFF outputs connect directly to an output port, we give the same numbering for both designs outputs,
+  // because it will not lead to SAT anyway. (we could have named them differently, but it doesn't matter).
   var_num=num_nodes;
   std::map< std::string, hcmNode* > imp_nodes = flatCell_imp->getNodes();
   for (nI =imp_nodes.begin(); nI != imp_nodes.end(); nI++){
@@ -216,7 +204,6 @@ int main(int argc, char **argv) {
     int t;
     int found = node->getProp("variable_num",t);
     if(found!=NOT_FOUND){ // already gave a value for DFFs outputs (the same in both cells) 
-      // cout << "existed " << node->getName() << endl;
       continue;
     }
     string node_name=node->getName();
@@ -244,35 +231,36 @@ int main(int argc, char **argv) {
     }
    
   } 
-
-  cout<<"\nVariable mapping for each cell :"<<endl;
-  cout << " ---- SPEC cell : " <<endl;
+  // print the variables mapping for convinience (numbers 1,2,3...), and create dict to get name of input from number
+  // comment out the comments to print also the variable mapping.
+  // cout<<"\nVariable mapping for each cell :"<<endl;
+  // cout << " ---- SPEC cell : " <<endl;
   std::map<int, string> input_var_to_name;
   for (nI =spec_nodes.begin(); nI != spec_nodes.end(); nI++){
     hcmNode *node= nI->second;
     int temp=0;
     node->getProp("variable_num",temp); 
     string name = node->getName();
-    cout<<name<< " = " <<temp <<endl;
+    // cout<<name<< " = " <<temp+1 <<endl;
     hcmPort *port = node->getPort();
     if(port && port->getDirection()==IN){
       input_var_to_name.insert(std::pair<int, string>(temp,name));
     }
   } 
-  cout << " ---- IMPLEMENTATION cell : " <<endl;
+  // cout << " ---- IMPLEMENTATION cell : " <<endl;
   for (nI =imp_nodes.begin(); nI != imp_nodes.end(); nI++){
     hcmNode *node= nI->second;
     int temp=0;
     node->getProp("variable_num",temp); 
     string name = node->getName();
-    cout<<name<< " = " <<temp <<endl;
+    // cout<<name<< " = " <<temp+1 <<endl;
     hcmPort *port = node->getPort();
     if(port && port->getDirection()==IN){
       input_var_to_name.insert(std::pair<int, string>(temp,name));
     } 
   } 
-
   cout <<" "<<endl;
+
   Solver S;
   // Declare all the variables (which is currently var_num-1 vars)
   for(int i=0;i<var_num;i++){
@@ -285,7 +273,6 @@ int main(int argc, char **argv) {
   temp_file<<(vdd_num+1)<< " 0" <<endl;
 
   //number of variable is var_num + number of outputs +1 (we will introduce new variable later for each xor of outputs and for the OR between all XORs)
-  // int nVars= var_num + outputs_cells.size()+1;
 
   int num_clauses= 2; // 2 for VDD and VSS clauses
 
@@ -318,10 +305,8 @@ int main(int argc, char **argv) {
   if(sat){
     cout << " -- SATISFIABLE - The circuits are different!" <<endl;
     cout << "Input assignment :" <<endl;
-    // for(int i=0; i<var_num;i++){
-    //   printf("%d = %s\n",i, (S.model[i]== l_Undef) ? "undef" : ((S.model[i]== l_True) ? "+" : "-"));
-    // }
     std::map< int, string >::const_iterator inpuI;
+    // printing the outputs assignment if SAT
     for(inpuI=input_var_to_name.begin(); inpuI!=input_var_to_name.end();inpuI++){
       string input_name = inpuI->second;
       int i = inpuI->first;
@@ -426,6 +411,9 @@ void add_dffs_to_map(hcmInstance* spec_inst,hcmInstance* imp_inst,std::map< hcmN
     hcmInstPort* ip_spec= ipI->second;
     hcmNode* node_spec= ip_spec->getNode();
     std::map<std::string, hcmInstPort* >::const_iterator I;
+    if(ip_spec->getPort()->getName()=="CLK"){
+      continue;
+    }
     if(ip_spec->getPort()->getDirection()==IN){
       for (I =imp_inst_ports.begin(); I != imp_inst_ports.end(); I++){
         hcmInstPort* ip_imp= I->second;
@@ -443,13 +431,14 @@ void add_dffs_to_map(hcmInstance* spec_inst,hcmInstance* imp_inst,std::map< hcmN
           int temp=0;
           node_spec->getProp("variable_num",temp);
           node_imp->setProp("variable_num",temp); // give imp dff output the same variable as in spec (it serves as "input")
-          // cout << "updated " << temp << endl;
+          // if the DFF connects directly to an output, we give both design the same output number, and not different number like in tutorial (as it doesn't affect the SAT decision in this specific case)
         }
       }
     }
   }
 }
 
+// add clauses for inverter and buffer (if inverted = true)
 void logic_Inverter(hcmInstance* inst,Solver &S,bool inverted,ofstream& file){
   int input_var, output_var;
   std::map<std::string, hcmInstPort* >::const_iterator ipI;
@@ -480,7 +469,7 @@ void logic_Inverter(hcmInstance* inst,Solver &S,bool inverted,ofstream& file){
 
 }
 
-
+// add clauses for AND and NAND gates (if inverted = true)
 void logic_AND(hcmInstance* inst,Solver &S, bool inverted,ofstream& file,int &num_clauses){
   int output_var;
   vector<int> input_var;
@@ -535,6 +524,7 @@ void logic_AND(hcmInstance* inst,Solver &S, bool inverted,ofstream& file,int &nu
   clauseLiterals.clear();
 }
 
+// add clauses for OR and NOR gates (if inverted = true)
 void logic_OR(hcmInstance* inst,Solver &S, bool inverted,ofstream& file,int &num_clauses){
   int output_var;
   vector<int> input_var;
@@ -588,6 +578,7 @@ void logic_OR(hcmInstance* inst,Solver &S, bool inverted,ofstream& file,int &num
   clauseLiterals.clear();
 }
 
+// add clauses for XOR and XNOR gates (if inverted = true)
 void logic_XOR(hcmInstance* inst,Solver &S, bool inverted,ofstream& file){
   int output_var;
   vector<int> input_var;
@@ -627,6 +618,7 @@ void logic_XOR(hcmInstance* inst,Solver &S, bool inverted,ofstream& file){
   }
 }
 
+// add clauses for each instance type (supporting only stdcell instances)
 void Instance_Add_Clauses(hcmInstance* inst,Solver &S,ofstream& file,int &num_clauses){
   string logic_name= inst->masterCell()->getName();
   if(logic_name.find("nor")!=std::string::npos){
